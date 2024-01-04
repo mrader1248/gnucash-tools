@@ -8,7 +8,17 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.11"
+click = "^8.1.7"
+pydantic-settings = "^2.1.0"
 
+[tool.poetry.group.dev]
+optional = true
+
+[tool.poetry.group.dev.dependencies]
+ipython = "^8.19.0"
+
+[tool.poetry.scripts]
+gct-export-shared-expenses = "gnucash_tools.export_shared_expenses:main"
 
 [build-system]
 requires = ["poetry-core"]
