@@ -50,15 +50,14 @@ class Book:
         for commodity_element in _get_children_by_tag_name(book_element, "commodity"):
             book.add_commodity(Commodity.from_xml_element(commodity_element))
 
-        for price_element in _get_children_by_tag_name(
-            _get_child_by_tag_name(book_element, "pricedb"), "price"
-        ):
-            commodity_id = CommodityId.from_xml_element(
-                _get_child_by_tag_name(price_element, "commodity")
-            )
-            book.commodities_by_id[commodity_id].price_history.insert_from_xml_element(
-                price_element
-            )
+        if pricedb_element := _get_child_by_tag_name(book_element, "pricedb"):
+            for price_element in _get_children_by_tag_name(pricedb_element, "price"):
+                commodity_id = CommodityId.from_xml_element(
+                    _get_child_by_tag_name(price_element, "commodity")
+                )
+                book.commodities_by_id[
+                    commodity_id
+                ].price_history.insert_from_xml_element(price_element)
 
         for account_element in _get_children_by_tag_name(book_element, "account"):
             book.add_account(Account.from_xml_element(account_element))
