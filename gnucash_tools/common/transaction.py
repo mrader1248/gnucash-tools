@@ -1,65 +1,12 @@
 import datetime
-import gzip
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from decimal import Decimal
-from enum import Enum
-from fractions import Fraction
 from pathlib import Path
-from typing import Generator
 from uuid import UUID
 
-
-def _get_children_by_tag_name(
-    element: ET.Element, tag_name: str
-) -> Generator[ET.Element, None, None]:
-    return (child for child in element if child.tag.endswith(tag_name))
-
-
-def _get_child_by_tag_name(element: ET.Element, tag_name: str) -> ET.Element:
-    return next(_get_children_by_tag_name(element, tag_name))
-
-
-def _fraction_string_to_decimal(s: str) -> Decimal:
-    x = Fraction(s)
-    return Decimal(x.numerator) / Decimal(x.denominator)
-
-
-class AccountType(Enum):
-    ROOT = 0
-    EQUITY = 1
-    ASSET = 10
-    BANK = 11
-    RECEIVABLE = 12
-    LIABILITY = 20
-    INCOME = 30
-    EXPENSE = 40
-    STOCK = 50
-
-    @staticmethod
-    def from_name(name: str) -> "AccountType":
-        result = next((t for t in AccountType if t.name == name), None)
-        if result is not None:
-            return result
-        else:
-            raise ValueError(f"Unknown account type '{name}'")
-
-
-@dataclass
-class Account:
-    id: UUID
-    name: str
-    type: AccountType
-
-    @staticmethod
-    def from_xml_element(account_element: ET.Element) -> "Account":
-        return Account(
-            id=UUID(_get_child_by_tag_name(account_element, "id").text),
-            name=_get_child_by_tag_name(account_element, "name").text,
-            type=AccountType.from_name(
-                _get_child_by_tag_name(account_element, "type").text
-            ),
-        )
+from ..util import _fraction_string_to_decimal, _get_child_by_tag_name
+from .account import Account
 
 
 @dataclass
@@ -68,10 +15,13 @@ class Transaction:
     date: datetime.date
     description: str
     positions: list["TransactionPosition"]
+    book: "Book | None" = None
 
     def __post_init__(self):
-        if sum(p.amount for p in self.positions) != 0:
+        if sum(p.value for p in self.positions) != 0:
             raise ValueError(f"Sum of transaction position amount is not zero")
+        for position in self.positions:
+            position.transaction = self
 
     def __str__(self) -> str:
         def equalize_lens(strings: list[str], pad="<") -> list[str]:
@@ -83,15 +33,15 @@ class Transaction:
         ) -> list[str]:
             names = equalize_lens([p.account.name for p in positions])
             amounts = equalize_lens(
-                [f"{p.amount * factor:.2f}" for p in positions], pad=">"
+                [f"{p.value * factor:.2f}" for p in positions], pad=">"
             )
             return [f"{name} {x}" for name, x in zip(names, amounts)]
 
         left_strings = format_block(
-            [p for p in self.positions if p.amount >= 0], factor=1
+            [p for p in self.positions if p.value >= 0], factor=1
         )
         right_strings = format_block(
-            [p for p in self.positions if p.amount < 0], factor=-1
+            [p for p in self.positions if p.value < 0], factor=-1
         )
 
         n_lines = max(len(left_strings), len(right_strings))
@@ -105,17 +55,16 @@ class Transaction:
         )
 
     @staticmethod
-    def from_xml_element(
-        transaction_element: ET.Element, accounts_by_id: dict[UUID, Account]
-    ) -> "Transaction":
+    def from_xml_element(transaction_element: ET.Element) -> "Transaction":
         split_elements = _get_child_by_tag_name(transaction_element, "splits")
         positions = [
             TransactionPosition(
-                account=accounts_by_id[
-                    UUID(_get_child_by_tag_name(split_element, "account").text)
-                ],
-                amount=_fraction_string_to_decimal(
+                account_id=UUID(_get_child_by_tag_name(split_element, "account").text),
+                value=_fraction_string_to_decimal(
                     _get_child_by_tag_name(split_element, "value").text
+                ),
+                quantity=_fraction_string_to_decimal(
+                    _get_child_by_tag_name(split_element, "quantity").text
                 ),
             )
             for split_element in split_elements
@@ -138,24 +87,9 @@ class Transaction:
         from_date: datetime.date | None = None,
         to_date: datetime.date | None = None,
     ) -> list["Transaction"]:
-        with gzip.open(path, "r") as gnucash_file:
-            tree = ET.parse(gnucash_file)
-        book = _get_child_by_tag_name(tree.getroot(), "book")
-
-        accounts_by_id = {
-            account.id: account
-            for account in (
-                Account.from_xml_element(account_element)
-                for account_element in _get_children_by_tag_name(book, "account")
-            )
-        }
-
         return [
             transaction
-            for transaction in (
-                Transaction.from_xml_element(e, accounts_by_id)
-                for e in _get_children_by_tag_name(book, "transaction")
-            )
+            for transaction in Book.load(path).transactions
             if (from_date is None or transaction.date >= from_date)
             and (to_date is None or transaction.date <= to_date)
         ]
@@ -163,5 +97,11 @@ class Transaction:
 
 @dataclass
 class TransactionPosition:
-    account: Account
-    amount: Decimal
+    account_id: Account
+    value: Decimal
+    quantity: Decimal
+    transaction: Transaction | None = None
+
+    @property
+    def account(self) -> Account:
+        return self.transaction.book.accounts_by_id[self.account_id]
