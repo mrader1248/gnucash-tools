@@ -92,3 +92,20 @@ class ValueHistory:
                 [self.values[0]]
                 + [y - x for x, y in zip(self.values[:-1], self.values[1:])],
             )
+
+    def __add__(self, other: "ValueHistory"):
+        if len(self) == 0:
+            return other
+        elif len(other) == 0:
+            return self
+        elif self.dates[0] > other.dates[0]:
+            return other + self
+        else:
+            k = next(
+                (j for j in range(len(self)) if self.dates[j] >= other.dates[0]), 0
+            )
+            dates1 = self.dates[:k]
+            values1 = self.values[:k]
+            dates2 = sorted(set(self.dates[k:]) | set(other.dates))
+            values2 = [self[date] + other[date] for date in dates2]
+            return ValueHistory(dates1 + dates2, values1 + values2)

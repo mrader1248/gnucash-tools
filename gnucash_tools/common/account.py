@@ -118,7 +118,9 @@ class Account:
                 if date >= quantity_history.dates[0]
             )
         )
-        balances = [quantity_history[date] * price_history[date] for date in dates]
+        balances = [
+            round(quantity_history[date] * price_history[date], 2) for date in dates
+        ]
         return ValueHistory(dates, balances)
 
     @property
@@ -138,3 +140,7 @@ class Account:
     @property
     def total_balance_history(self) -> "ValueHistory":
         return self.total_balance_change_by_date.balance_history_from_changes
+
+    @property
+    def is_root_account(self) -> bool:
+        return self.parent_account_id is None
