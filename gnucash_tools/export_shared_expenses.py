@@ -5,7 +5,7 @@ from pathlib import Path
 import click
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from .common import AccountType, Transaction
+from .common import AccountType, Book
 
 
 class Settings(BaseSettings):
@@ -18,8 +18,8 @@ class Settings(BaseSettings):
 class App:
     def __init__(self, from_date: datetime.datetime, to_date: datetime.datetime):
         self.settings = Settings()
-        self.from_date = from_date
-        self.to_date = to_date
+        self.from_date = from_date.date() if from_date is not None else None
+        self.to_date = to_date.date() if to_date is not None else None
 
     def run(self) -> None:
         self.load_data()
@@ -28,10 +28,10 @@ class App:
     def load_data(self) -> None:
         self.transactions = [
             transaction
-            for transaction in Transaction.load(
-                self.settings.gnucash_file, self.from_date.date(), self.to_date.date()
-            )
-            if any(
+            for transaction in Book.load(self.settings.gnucash_file).transactions
+            if (self.from_date is None or transaction.date >= self.from_date)
+            and (self.to_date is None or transaction.date <= self.to_date)
+            and any(
                 position.account.name == self.settings.shared_receivable_account
                 for position in transaction.positions
             )
@@ -62,13 +62,14 @@ class App:
                     for p in expense_positions
                 )
             ):
-                account_name = expense_positions[0].account.name
-                account_name = self.account_name_map.get(account_name, account_name)
-                print(
-                    f"{transaction.date},{transaction.description},"
-                    f"{account_name},"
-                    f"{2*shared_receivable_positions[0].amount}"
-                )
+                if shared_receivable_positions[0].value > 0:
+                    account_name = expense_positions[0].account.name
+                    account_name = self.account_name_map.get(account_name, account_name)
+                    print(
+                        f'{transaction.date},"{transaction.description}",'
+                        f'"{account_name}",'
+                        f"{2*shared_receivable_positions[0].value}"
+                    )
             else:
                 skipped_transactions.append(transaction)
 
