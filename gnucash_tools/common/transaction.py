@@ -81,19 +81,6 @@ class Transaction:
             positions=positions,
         )
 
-    # @staticmethod
-    # def load(
-    #     path: Path,
-    #     from_date: datetime.date | None = None,
-    #     to_date: datetime.date | None = None,
-    # ) -> list["Transaction"]:
-    #     return [
-    #         transaction
-    #         for transaction in Book.load(path).transactions
-    #         if (from_date is None or transaction.date >= from_date)
-    #         and (to_date is None or transaction.date <= to_date)
-    #     ]
-
 
 @dataclass
 class TransactionPosition:
