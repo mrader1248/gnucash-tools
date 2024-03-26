@@ -5,7 +5,7 @@ from pathlib import Path
 from uuid import UUID
 
 from ..util import _get_child_by_tag_name, _get_children_by_tag_name
-from .account import Account, AccountType
+from .account import Account
 from .commodity import Commodity, CommodityId
 from .transaction import Transaction
 
